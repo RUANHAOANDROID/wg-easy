@@ -71,8 +71,8 @@ To automatically install & run wg-easy, simply run:
 docker run --detach \
   --name wg-easy \
   --env LANG=de \
-  --env WG_HOST=<🚨YOUR_SERVER_IP> \
-  --env PASSWORD_HASH='<🚨YOUR_ADMIN_PASSWORD_HASH>' \
+  --env WG_HOST=127.0.0.1 \
+  --env PASSWORD_HASH='$2a$12$xmZx0xiBi9EnV.HSHpkNIOdTyB/QjgNZ/typtdt8LTntHzV/07lPi' \
   --env PORT=51821 \
   --env WG_PORT=51820 \
   --volume ~/.wg-easy:/etc/wireguard \

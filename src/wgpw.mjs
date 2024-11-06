@@ -1,15 +1,15 @@
 'use strict';
 
 // Import needed libraries
-import bcrypt from 'bcryptjs';
-import { Writable } from 'stream';
-import readline from 'readline';
+import bcrypt from 'bcryptjs';// 用于加密和验证密码的bcrypt库
+import { Writable } from 'stream';// Node.js流模块中的Writable类，用于自定义输出流
+import readline from 'readline';// 用于逐行读取输入的readline模块
 
-// Function to generate hash
+// Function to generate hash  生成哈希的函数
 const generateHash = async (password) => {
   try {
-    const salt = await bcrypt.genSalt(12);
-    const hash = await bcrypt.hash(password, salt);
+    const salt = await bcrypt.genSalt(12); // 生成加盐值，强度为12
+    const hash = await bcrypt.hash(password, salt); // 使用密码和盐值生成哈希
     // eslint-disable-next-line no-console
     console.log(`PASSWORD_HASH='${hash}'`);
   } catch (error) {
@@ -17,7 +17,7 @@ const generateHash = async (password) => {
   }
 };
 
-// Function to compare password with hash
+// Function to compare password with hash  比较密码与哈希
 const comparePassword = async (password, hash) => {
   try {
     const match = await bcrypt.compare(password, hash);
@@ -32,7 +32,7 @@ const comparePassword = async (password, hash) => {
     throw new Error(`Failed to compare password and hash : ${error}`);
   }
 };
-
+// 从标准输入读取密码
 const readStdinPassword = () => {
   return new Promise((resolve) => {
     process.stdout.write('Enter your password: ');
@@ -55,7 +55,7 @@ const readStdinPassword = () => {
     });
   });
 };
-
+// 自执行异步函数，处理命令行参数
 (async () => {
   try {
     // Retrieve command line arguments
@@ -77,6 +77,6 @@ const readStdinPassword = () => {
     // eslint-disable-next-line no-console
     console.error(error);
     // eslint-disable-next-line no-process-exit
-    process.exit(1);
+    process.exit(1);//使用错误代码退出进程
   }
 })();

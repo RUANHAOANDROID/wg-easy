@@ -1,15 +1,17 @@
 'use strict';
 
-const bcrypt = require('bcryptjs');
-const crypto = require('node:crypto');
-const basicAuth = require('basic-auth');
-const { createServer } = require('node:http');
-const { stat, readFile } = require('node:fs/promises');
-const { resolve, sep } = require('node:path');
+// 引入必要的模块
+const bcrypt = require('bcryptjs'); // 用于加密和验证密码的bcrypt库
+const crypto = require('node:crypto'); // 提供加密功能的模块
+const basicAuth = require('basic-auth'); // 用于处理HTTP基本身份验证
+const { createServer } = require('node:http'); // 创建HTTP服务器的模块
+const { stat, readFile } = require('node:fs/promises'); // 文件系统模块，用于读取文件和获取文件信息
+const { resolve, sep } = require('node:path'); // 处理和解析文件路径
 
-const expressSession = require('express-session');
-const debug = require('debug')('Server');
-
+// 引入其他库和工具
+const expressSession = require('express-session'); // 用于会话管理的Express中间件
+const debug = require('debug')('Server'); // 用于调试的debug库
+// 引入H3框架的实用方法
 const {
   createApp,
   createError,
@@ -23,8 +25,9 @@ const {
   serveStatic,
 } = require('h3');
 
+// 引入WireGuard服务
 const WireGuard = require('../services/WireGuard');
-
+// 引入配置参数
 const {
   PORT,
   WEBUI_HOST,
@@ -41,20 +44,22 @@ const {
   ENABLE_PROMETHEUS_METRICS,
   PROMETHEUS_METRICS_PASSWORD,
 } = require('../config');
-
+// 判断是否需要密码和Prometheus密码
 const requiresPassword = !!PASSWORD_HASH;
 const requiresPrometheusPassword = !!PROMETHEUS_METRICS_PASSWORD;
 
 /**
  * Checks if `password` matches the PASSWORD_HASH.
+ * 检查给定的密码是否与PASSWORD_HASH匹配
  *
  * If environment variable is not set, the password is always invalid.
+ *  如果环境变量未设置，密码始终无效
  *
- * @param {string} password String to test
- * @returns {boolean} true if matching environment, otherwise false
+ * @param {string} password String to test 要验证的密码字符串
+ * @returns {boolean} true if matching environment, otherwise false 如果匹配则返回true，否则返回false
  */
 const isPasswordValid = (password, hash) => {
-  if (typeof password !== 'string') {
+  if (typeof password !== 'string') { // 使用bcrypt进行密码验证
     return false;
   }
   if (hash) {
@@ -63,69 +68,70 @@ const isPasswordValid = (password, hash) => {
 
   return false;
 };
-
+// 每分钟执行的定时任务，用于调用WireGuard的定时任务方法
 const cronJobEveryMinute = async () => {
   await WireGuard.cronJobEveryMinute();
   setTimeout(cronJobEveryMinute, 60 * 1000);
 };
 
+// 定义Server类
 module.exports = class Server {
 
   constructor() {
     const app = createApp();
     this.app = app;
-
+    // 使用Express会话中间件
     app.use(fromNodeMiddleware(expressSession({
       secret: crypto.randomBytes(256).toString('hex'),
       resave: true,
       saveUninitialized: true,
     })));
-
+    // 定义路由和API处理程序
     const router = createRouter();
     app.use(router);
 
     router
       .get('/api/release', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return RELEASE;
+        return RELEASE;// 返回发布版本信息
       }))
 
       .get('/api/lang', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return `"${LANG}"`;
+        return `"${LANG}"`;// 返回发布版本信息
       }))
 
       .get('/api/remember-me', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return MAX_AGE > 0;
+        return MAX_AGE > 0;// 返回语言设置
       }))
 
       .get('/api/ui-traffic-stats', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return `${UI_TRAFFIC_STATS}`;
+        return `${UI_TRAFFIC_STATS}`;// 返回是否启用“记住我”功能
       }))
 
       .get('/api/ui-chart-type', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return `"${UI_CHART_TYPE}"`;
+        return `"${UI_CHART_TYPE}"`;// 返回UI流量统计信息
       }))
 
       .get('/api/wg-enable-one-time-links', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return `${WG_ENABLE_ONE_TIME_LINKS}`;
+        return `${WG_ENABLE_ONE_TIME_LINKS}`; // 返回UI图表类型
       }))
 
       .get('/api/ui-sort-clients', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return `${UI_ENABLE_SORT_CLIENTS}`;
+        return `${UI_ENABLE_SORT_CLIENTS}`;// 返回是否启用一次性链接功能
       }))
 
       .get('/api/wg-enable-expire-time', defineEventHandler((event) => {
         setHeader(event, 'Content-Type', 'application/json');
-        return `${WG_ENABLE_EXPIRES_TIME}`;
+        return `${WG_ENABLE_EXPIRES_TIME}`; // 返回是否启用客户端过期时间功能
       }))
 
-      // Authentication
+      // Authentication 用户认证的API端点
       .get('/api/session', defineEventHandler((event) => {
         const authenticated = requiresPassword
           ? !!(event.node.req.session && event.node.req.session.authenticated)
@@ -138,6 +144,7 @@ module.exports = class Server {
       }))
       .get('/cnf/:clientOneTimeLink', defineEventHandler(async (event) => {
         if (WG_ENABLE_ONE_TIME_LINKS === 'false') {
+          // 如果一次性链接未启用，返回404错误
           throw createError({
             status: 404,
             message: 'Invalid state',
@@ -149,14 +156,15 @@ module.exports = class Server {
         if (!client) return;
         const clientId = client.id;
         const config = await WireGuard.getClientConfiguration({ clientId });
-        await WireGuard.eraseOneTimeLink({ clientId });
+        await WireGuard.eraseOneTimeLink({ clientId });// 擦除一次性链接
         setHeader(event, 'Content-Disposition', `attachment; filename="${clientOneTimeLink}.conf"`);
         setHeader(event, 'Content-Type', 'text/plain');
-        return config;
+        return config;//返回客户端配置
       }))
       .post('/api/session', defineEventHandler(async (event) => {
+        // 创建用户会话的API端点
         const { password, remember } = await readBody(event);
-
+        // 如果不需要密码，API不应被调用
         if (!requiresPassword) {
           // if no password is required, the API should never be called.
           // Do not automatically authenticate the user.
@@ -165,7 +173,7 @@ module.exports = class Server {
             message: 'Invalid state',
           });
         }
-
+        // 密码不正确，返回401错误
         if (!isPasswordValid(password, PASSWORD_HASH)) {
           throw createError({
             status: 401,
@@ -174,30 +182,30 @@ module.exports = class Server {
         }
 
         if (MAX_AGE && remember) {
-          event.node.req.session.cookie.maxAge = MAX_AGE;
+          event.node.req.session.cookie.maxAge = MAX_AGE; // 设置会话的有效期
         }
-        event.node.req.session.authenticated = true;
-        event.node.req.session.save();
+        event.node.req.session.authenticated = true;// 标记会话为已认证
+        event.node.req.session.save();// 保存会话
 
         debug(`New Session: ${event.node.req.session.id}`);
 
         return { success: true };
       }));
 
-    // WireGuard
+    // WireGuard  WireGuard的中间件，用于保护API端点
     app.use(
       fromNodeMiddleware((req, res, next) => {
         if (!requiresPassword || !req.url.startsWith('/api/')) {
-          return next();
+          return next(); // 如果不需要密码或请求不涉及API，则继续
         }
 
         if (req.session && req.session.authenticated) {
-          return next();
+          return next(); // 如果会话已认证，则继续
         }
 
         if (req.url.startsWith('/api/') && req.headers['authorization']) {
           if (isPasswordValid(req.headers['authorization'], PASSWORD_HASH)) {
-            return next();
+            return next();// 如果提供了有效的Authorization头，则继续
           }
           return res.status(401).json({
             error: 'Incorrect Password',
@@ -209,27 +217,28 @@ module.exports = class Server {
         });
       }),
     );
-
+    // 创建新的路由并挂载到应用上
     const router2 = createRouter();
     app.use(router2);
 
+    // 更多的WireGuard相关API路由定义
     router2
       .delete('/api/session', defineEventHandler((event) => {
         const sessionId = event.node.req.session.id;
 
-        event.node.req.session.destroy();
+        event.node.req.session.destroy();// 销毁会话
 
         debug(`Deleted Session: ${sessionId}`);
         return { success: true };
       }))
       .get('/api/wireguard/client', defineEventHandler(() => {
-        return WireGuard.getClients();
+        return WireGuard.getClients(); // 获取所有WireGuard客户端
       }))
       .get('/api/wireguard/client/:clientId/qrcode.svg', defineEventHandler(async (event) => {
         const clientId = getRouterParam(event, 'clientId');
         const svg = await WireGuard.getClientQRCodeSVG({ clientId });
         setHeader(event, 'Content-Type', 'image/svg+xml');
-        return svg;
+        return svg; // 返回客户端二维码（SVG格式）
       }))
       .get('/api/wireguard/client/:clientId/configuration', defineEventHandler(async (event) => {
         const clientId = getRouterParam(event, 'clientId');
@@ -248,12 +257,12 @@ module.exports = class Server {
         const { name } = await readBody(event);
         const { expiredDate } = await readBody(event);
         await WireGuard.createClient({ name, expiredDate });
-        return { success: true };
+        return { success: true };// 创建新客户端
       }))
       .delete('/api/wireguard/client/:clientId', defineEventHandler(async (event) => {
         const clientId = getRouterParam(event, 'clientId');
         await WireGuard.deleteClient({ clientId });
-        return { success: true };
+        return { success: true };// 删除客户端
       }))
       .post('/api/wireguard/client/:clientId/enable', defineEventHandler(async (event) => {
         const clientId = getRouterParam(event, 'clientId');
@@ -336,7 +345,7 @@ module.exports = class Server {
       });
     };
 
-    // Check Prometheus credentials
+    // Check Prometheus credentials Prometheus指标保护中间件
     app.use(
       fromNodeMiddleware((req, res, next) => {
         if (!requiresPrometheusPassword || !req.url.startsWith('/metrics')) {
@@ -359,11 +368,11 @@ module.exports = class Server {
       }),
     );
 
-    // Prometheus Metrics API
+    // Prometheus Metrics API Prometheus指标API路由定义
     const routerPrometheusMetrics = createRouter();
     app.use(routerPrometheusMetrics);
 
-    // Prometheus Routes
+    // Prometheus Routes  Prometheus指标相关的路由
     routerPrometheusMetrics
       .get('/metrics', defineEventHandler(async (event) => {
         setHeader(event, 'Content-Type', 'text/plain');
